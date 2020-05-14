@@ -42,17 +42,26 @@ Installation
 
 From a ZIP file:
 
-* Download the latest version of the plugin
-* Unzip to */plugins*
+* Download the latest version of the plugin.
+* Unzip it to /plugins.
 
 From a GIT repository:
 
-* Clone repository with <b>git clone https://github.com/anteo/redmine_custom_workflows.git plugins/redmine_custom_workflows</b> command
+* Clone  the repository:
+
+```
+git clone https://github.com/anteo/redmine_custom_workflows.git
+```
 
 After download:
 
-* Run <b>rake redmine:plugins:migrate</b>
-* Restart Redmine
+* Run migrations and restart the application:
+
+```
+RAILS_ENV=production bundle exec rake db:migrate
+RAILS_ENV=production bundle exec rake redmine:plugins:migrate NAME=redmine_custom_workflows
+systemctl restart apache2
+```
 
 Configuration
 -------------
