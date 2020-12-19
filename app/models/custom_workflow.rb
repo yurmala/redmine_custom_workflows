@@ -21,21 +21,22 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 class CustomWorkflow < ActiveRecord::Base
-  OBSERVABLES = [:issue, :issue_attachments, :user, :attachment, :group, :group_users, :project, :project_attachments,
+  OBSERVABLES = [:issue, :issue_relation, :issue_attachments, :user, :attachment, :group, :group_users, :project, :project_attachments,
                  :wiki_content, :wiki_page_attachments, :time_entry, :version, :shared]
   PROJECT_OBSERVABLES = [:issue, :issue_attachments, :project, :project_attachments, :wiki_content, :wiki_page_attachments, :time_entry, :version]
   COLLECTION_OBSERVABLES = [:group_users, :issue_attachments, :project_attachments, :wiki_page_attachments]
-  SINGLE_OBSERVABLES = [:issue, :user, :group, :attachment, :project, :wiki_content, :time_entry, :version]
+  SINGLE_OBSERVABLES = [:issue, :issue_relation, :user, :group, :attachment, :project, :wiki_content, :time_entry, :version]
 
   has_and_belongs_to_many :projects
   acts_as_list
 
   validates_presence_of :name
-  validates_uniqueness_of :name, :case_sensitive => false
-  validates_format_of :author, :with => /\A([^@\s]+)@((?:[-a-z0-9]+\.)+[a-z]{2,})\z/i, :allow_blank => true
-  validate :validate_syntax, :validate_scripts_presence, :if => Proc.new {|workflow| workflow.respond_to?(:observable) and workflow.active?}
+  validates_uniqueness_of :name, case_sensitive: false
+  validates_format_of :author, with: /\A([^@\s]+)@((?:[-a-z0-9]+\.)+[a-z]{2,})\z/i, allow_blank: true
+  validate :validate_syntax, :validate_scripts_presence, if: Proc.new { |workflow| workflow.respond_to?(:observable) and workflow.active? }
 
-  scope :active, lambda { where(:active => true) }
+  scope :active, lambda { where(active: true) }
+  scope :sorted, lambda { order(:position) }
   scope :for_project, (lambda do |project|
     where("is_for_all=? OR EXISTS (SELECT * FROM #{reflect_on_association(:projects).join_table} WHERE project_id=? AND custom_workflow_id=id)",
           true, project.id)
@@ -43,11 +44,11 @@ class CustomWorkflow < ActiveRecord::Base
 
   def self.import_from_xml(xml)
     attributes = Hash.from_xml(xml).values.first
-    attributes.delete('exported_at')
-    attributes.delete('plugin_version')
-    attributes.delete('ruby_version')
-    attributes.delete('rails_version')
-    CustomWorkflow.new(attributes)
+    attributes.delete 'exported_at'
+    attributes.delete 'plugin_version'
+    attributes.delete 'ruby_version'
+    attributes.delete 'rails_version'
+    CustomWorkflow.new attributes
   end
 
   def self.log_message(str, object)
@@ -57,7 +58,7 @@ class CustomWorkflow < ActiveRecord::Base
   def self.run_shared_code(object)
     log_message '= Running shared code', object
     if CustomWorkflow.table_exists? # Due to DB migration
-      CustomWorkflow.active.where(observable: :shared).find_each do |workflow|
+      CustomWorkflow.active.where(observable: :shared).sorted.each do |workflow|
         unless workflow.run(object, :shared_code)
           log_message '= Abort running shared code', object
           return false
@@ -77,7 +78,7 @@ class CustomWorkflow < ActiveRecord::Base
       end
       return true unless workflows.any?
       log_message "= Running #{event} custom workflows", object
-      workflows.each do |workflow|
+      workflows.sorted.each do |workflow|
         unless workflow.run(object, event)
           log_message "= Abort running #{event} custom workflows", object
           return false
